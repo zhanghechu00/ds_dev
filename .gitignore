@@ -1,0 +1,6 @@
+.env
+model.log
+__pycache__/
+*.pyc
+.venv/
+.idea/

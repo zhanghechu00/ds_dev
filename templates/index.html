@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aifrac 智能油气专家</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+  <!-- 第三方样式（代码高亮 / 公式 / 行号） -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs/themes/prism-tomorrow.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs/plugins/line-numbers/prism-line-numbers.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+</head>
+<body class="theme-dark">
+  <!-- 顶部 Banner，可通过 JS 显示/隐藏 -->
+
+
+  <div class="layout">
+    <!-- 左侧 Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <img src="{{ url_for('static', filename='icons/aifrac.png') }}" alt="Aifrac Logo" class="logo-img">
+          <span>Aifrac</div>
+        <button id="newChatBtn" class="btn btn-primary">+ 新建对话</button>
+      </div>
+
+      <div class="sidebar-section">
+        <label class="section-title">模型</label>
+        <select id="modelSelect" class="select">
+          <option value="deepseek-chat" selected>deepseek-chat</option>
+          <option value="gpt-4o-mini">gpt-4o-mini</option>
+          <option value="local-ollama">local (ollama)</option>
+        </select>
+      </div>
+
+      <div class="sidebar-section">
+        <label class="section-title">会话</label>
+        <div id="conversationList" class="conversation-list"></div>
+      </div>
+    </aside>
+
+    <!-- 主聊天区 -->
+    <main class="main">
+      <header class="chat-header">
+        <div class="title">
+          <h1> Aifrac 智能体</h1>
+          <div class="subtitle">专用工具接入</div>
+        </div>
+        <div class="toolbar">
+          <button id="toggleThemeBtn" class="icon-btn" title="主题">🌓</button>
+          <button id="exportBtn" class="icon-btn" title="导出对话">⬇️</button>
+          <button id="clearBtn" class="icon-btn" title="清空对话">🗑️</button>
+        </div>
+      </header>
+
+      <section id="chatbox" class="chatbox" aria-live="polite"></section>
+
+      <footer class="composer">
+        <div class="formatting-toolbar" id="formatToolbar">
+          <button data-cmd="bold" class="fmt-btn" title="加粗">B</button>
+          <button data-cmd="italic" class="fmt-btn" title="斜体">I</button>
+          <button data-cmd="code" class="fmt-btn" title="代码">{"{ }"}</button>
+          <button data-cmd="ul" class="fmt-btn" title="列表">•</button>
+        </div>
+        <div class="input-row">
+          <textarea id="userInput" placeholder="Shift+Enter 换行，Enter 发送" rows="1"></textarea>
+          <button id="sendButton" class="btn btn-primary">发送</button>
+        </div>
+
+      </footer>
+    </main>
+  </div>
+
+  <!-- 图片灯箱 -->
+  <div id="lightbox"><img alt=""></div>
+
+  <!-- 第三方脚本（Markdown / 代码高亮 / 公式 / Mermaid） -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs/prism.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs/components/prism-bash.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs/components/prism-json.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs/components/prism-markup.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs/plugins/line-numbers/prism-line-numbers.min.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
