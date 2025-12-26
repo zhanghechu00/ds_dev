@@ -4,6 +4,10 @@ import asyncio
 import subprocess
 import os
 from flask import url_for
+try:
+    from docx import Document
+except ImportError:
+    Document = None
 # Initialize FastMCP server
 # mcp = FastMCP("search_mcp_server", log_level="ERROR")
 mcp = FastMCP("faction_mcp_server", log_level="ERROR")
@@ -340,6 +344,109 @@ async def search_result(alt: str) -> str:
     elif alt == "地应力数据统计结果":
         img_url = "http://localhost:5000/static/simulation/地应力数据统计.png"
     return f"![alt]({img_url})"
+@mcp.tool()
+async def copy_files(source_folder: str, destination_folder: str) -> str:
+    """将源文件夹下的所有文件复制到目标文件夹
+
+    Args:
+        source_folder: 源文件夹路径
+        destination_folder: 目标文件夹路径
+    """
+    if not os.path.exists(source_folder):
+        return f"源文件夹不存在: {source_folder}"
+    
+    if not os.path.exists(destination_folder):
+        try:
+            os.makedirs(destination_folder)
+        except Exception as e:
+            return f"无法创建目标文件夹: {str(e)}"
+
+    copied_count = 0
+    errors = []
+
+    try:
+        for item in os.listdir(source_folder):
+            s = os.path.join(source_folder, item)
+            d = os.path.join(destination_folder, item)
+            if os.path.isfile(s):
+                try:
+                    shutil.copy2(s, d)
+                    copied_count += 1
+                except Exception as e:
+                    errors.append(f"复制 {item} 失败: {str(e)}")
+    except Exception as e:
+        return f"遍历源文件夹时出错: {str(e)}"
+    
+    result_msg = f"成功复制了 {copied_count} 个文件到 {destination_folder}。"
+    if errors:
+        result_msg += "\n错误:\n" + "\n".join(errors)
+    
+    return result_msg
+
+@mcp.tool()
+async def verify_word_consistency(file_path: str, keyword: str) -> str:
+    """
+    检查Word文档中，指定关键字在正文和表格中的对应值是否一致。
+    
+    Args:
+        file_path: Word文档路径
+        keyword: 要查找的关键字
+    """
+    if Document is None:
+        return "运行此工具需要安装 python-docx 库。请在终端运行: pip install python-docx"
+    
+    if not os.path.exists(file_path):
+        return f"文件不存在: {file_path}"
+    
+    try:
+        doc = Document(file_path)
+    except Exception as e:
+        return f"无法打开Word文档: {str(e)}"
+    
+    text_values = []
+    table_values = []
+    
+    # 1. Search in Paragraphs (Text)
+    for para in doc.paragraphs:
+        if keyword in para.text:
+            # Simple extraction: take everything after the keyword
+            parts = para.text.split(keyword, 1)
+            if len(parts) > 1:
+                val = parts[1].strip().lstrip(":：").strip()
+                if val:
+                    text_values.append(val)
+
+    # 2. Search in Tables
+    for table in doc.tables:
+        for row in table.rows:
+            cells = row.cells
+            for i, cell in enumerate(cells):
+                if keyword in cell.text:
+                    # Check if there is a next cell
+                    if i + 1 < len(cells):
+                        val = cells[i+1].text.strip()
+                        if val:
+                            table_values.append(val)
+    
+    if not text_values:
+        return f"在正文中未找到关键字 '{keyword}' 的相关值。"
+    if not table_values:
+        return f"在表格中未找到关键字 '{keyword}' 的相关值。"
+        
+    text_val_str = "; ".join(text_values)
+    table_val_str = "; ".join(table_values)
+    
+    # Check if any text value matches any table value
+    match = False
+    for tv in text_values:
+        if tv in table_values:
+            match = True
+            break
+            
+    if match:
+        return f"内容一致。正文值: [{text_val_str}]，表格值: [{table_val_str}]"
+    else:
+        return f"内容不一致！正文值: [{text_val_str}]，表格值: [{table_val_str}]"
 
 if __name__ == "__main__":
     # Initialize and run the server

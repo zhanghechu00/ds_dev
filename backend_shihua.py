@@ -273,6 +273,48 @@ TOOLS = [
                 "required": []
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "copy_files",
+            "description": "将源文件夹下的所有文件复制到目标文件夹",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "source_folder": {
+                        "type": "string",
+                        "description": "源文件夹路径"
+                    },
+                    "destination_folder": {
+                        "type": "string",
+                        "description": "目标文件夹路径"
+                    }
+                },
+                "required": ["source_folder", "destination_folder"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "verify_word_consistency",
+            "description": "检查Word文档中，指定关键字在正文和表格中的对应值是否一致",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Word文档路径"
+                    },
+                    "keyword": {
+                        "type": "string",
+                        "description": "要查找的关键字"
+                    }
+                },
+                "required": ["file_path", "keyword"]
+            }
+        }
     }
 
 ]
@@ -295,6 +337,8 @@ REQUIRED_FIELDS = {
     "run_Aifrac2Petrel": ["query"],
     "run_boundary": ["query", "F"],
     "run_crashsimulation": ["query", "file_name"],
+    "copy_files": ["source_folder", "destination_folder"],
+    "verify_word_consistency": ["file_path", "keyword"],
 }
 class AppLogger:
     def __init__(self):
