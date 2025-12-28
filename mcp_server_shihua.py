@@ -412,7 +412,8 @@ async def verify_word_consistency(file_path: str, keyword: str) -> str:
             # Simple extraction: take everything after the keyword
             parts = para.text.split(keyword, 1)
             if len(parts) > 1:
-                val = parts[1].strip().lstrip(":：").strip()
+                # 增强清洗逻辑：去除常见的连接词（如"为"、"is"）、冒号、句号等
+                val = parts[1].strip().lstrip(":：为is").strip("。.").strip()
                 if val:
                     text_values.append(val)
 
@@ -437,10 +438,14 @@ async def verify_word_consistency(file_path: str, keyword: str) -> str:
     table_val_str = "; ".join(table_values)
     
     # Check if any text value matches any table value
+    # 增强比较逻辑：如果表格中的值包含在正文提取的值中（反之亦然），也视为一致
     match = False
     for tv in text_values:
-        if tv in table_values:
-            match = True
+        for tab_v in table_values:
+            if tv == tab_v or tab_v in tv or tv in tab_v:
+                match = True
+                break
+        if match:
             break
             
     if match:
