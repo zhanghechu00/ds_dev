@@ -439,17 +439,33 @@ async def verify_word_consistency(file_path: str, keyword: str) -> str:
     
     # Check if any text value matches any table value
     # 增强比较逻辑：如果表格中的值包含在正文提取的值中（反之亦然），也视为一致
-    match = False
+    match_count = 0
     for tv in text_values:
         for tab_v in table_values:
             if tv == tab_v or tab_v in tv or tv in tab_v:
-                match = True
+                match_count += 1
                 break
-        if match:
-            break
-            
-    if match:
-        return f"内容一致。正文值: [{text_val_str}]，表格值: [{table_val_str}]"
+    
+    # 检查正文内部是否存在冲突（即正文提取出了多个不同的值）
+    # 过滤逻辑：如果提取的值中既有含数字的（如"15.5%"），也有不含数字的（如"测试"），
+    # 则优先信任含数字的值作为“真实数据”，忽略非数字的噪声。
+    has_digits = [v for v in text_values if any(char.isdigit() for char in v)]
+    no_digits = [v for v in text_values if not any(char.isdigit() for char in v)]
+    
+    final_text_values = text_values
+    if has_digits and no_digits:
+        final_text_values = has_digits
+        # 更新用于显示的字符串，只显示过滤后的有效值
+        text_val_str = "; ".join(final_text_values)
+
+    unique_text_values = set(final_text_values)
+    has_internal_conflict = len(unique_text_values) > 1
+
+    if match_count > 0:
+        if has_internal_conflict:
+             return f"部分一致（警告：正文存在多值冲突）。正文值: [{text_val_str}]，表格值: [{table_val_str}]。虽然找到了匹配项，但正文中存在多个不同的数值，请人工核实。"
+        else:
+             return f"内容一致。正文值: [{text_val_str}]，表格值: [{table_val_str}]"
     else:
         return f"内容不一致！正文值: [{text_val_str}]，表格值: [{table_val_str}]"
 
