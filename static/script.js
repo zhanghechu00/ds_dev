@@ -79,10 +79,47 @@ function renderSidebar() {
   state.conversations.forEach(c => {
     const el = document.createElement('div');
     el.className = 'convo-item' + (c.id === state.activeId ? ' active' : '');
-    el.textContent = c.title || '未命名对话';
+    
+    // 标题区域
+    const titleSpan = document.createElement('span');
+    titleSpan.textContent = c.title || '未命名对话';
+    titleSpan.style.flex = '1';
+    titleSpan.style.overflow = 'hidden';
+    titleSpan.style.textOverflow = 'ellipsis';
+    titleSpan.style.whiteSpace = 'nowrap';
+    
+    // 删除按钮
+    const delBtn = document.createElement('button');
+    delBtn.innerHTML = '&times;'; // × 符号
+    delBtn.className = 'del-btn';
+    delBtn.title = '删除对话';
+    delBtn.onclick = (e) => {
+      e.stopPropagation(); // 防止触发选中事件
+      if (confirm('确定要删除这个对话吗？')) {
+        deleteConversation(c.id);
+      }
+    };
+
+    el.appendChild(titleSpan);
+    el.appendChild(delBtn);
+    
     el.onclick = () => { state.activeId = c.id; renderAll(); };
     conversationList.appendChild(el);
   });
+}
+
+function deleteConversation(id) {
+  state.conversations = state.conversations.filter(c => c.id !== id);
+  if (state.activeId === id) {
+    state.activeId = state.conversations.length > 0 ? state.conversations[0].id : null;
+  }
+  saveState();
+  
+  if (!state.conversations.length) {
+    startNewChat(); // 如果删光了，自动新建一个
+  } else {
+    renderAll();
+  }
 }
 function renderAll() {
   renderSidebar();
