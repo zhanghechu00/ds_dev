@@ -315,6 +315,31 @@ TOOLS = [
                 "required": ["file_path", "keyword"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "extract_heights_from_image",
+            "description": "从地形图图片中提取高程数据",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "image_path": {
+                        "type": "string",
+                        "description": "输入图片路径"
+                    },
+                    "grid_r": {
+                        "type": "integer",
+                        "description": "行方向网格数 (默认: 100)"
+                    },
+                    "grid_c": {
+                        "type": "integer",
+                        "description": "列方向网格数 (默认: 100)"
+                    }
+                },
+                "required": ["image_path"]
+            }
+        }
     }
 
 ]
@@ -339,6 +364,7 @@ REQUIRED_FIELDS = {
     "run_crashsimulation": ["query", "file_name"],
     "copy_files": ["source_folder", "destination_folder"],
     "verify_word_consistency": ["file_path", "keyword"],
+    "extract_heights_from_image": ["image_path"],
 }
 class AppLogger:
     def __init__(self):

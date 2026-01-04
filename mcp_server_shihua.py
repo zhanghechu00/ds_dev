@@ -451,6 +451,66 @@ async def verify_word_consistency(file_path: str, keyword: str) -> str:
     # 则优先信任含数字的值作为“真实数据”，忽略非数字的噪声。
     has_digits = [v for v in text_values if any(char.isdigit() for char in v)]
     no_digits = [v for v in text_values if not any(char.isdigit() for char in v)]
+
+    if match_count > 0:
+        return f"内容一致。正文值: [{text_val_str}]，表格值: [{table_val_str}]"
+    else:
+        return f"内容不一致！正文值: [{text_val_str}]，表格值: [{table_val_str}]"
+
+@mcp.tool()
+async def extract_heights_from_image(image_path: str, grid_r: int = 100, grid_c: int = 100) -> str:
+    """
+    从地形图图片中提取高程数据。
+    
+    Args:
+        image_path: 输入图片路径
+        grid_r: 行方向网格数 (默认: 100)
+        grid_c: 列方向网格数 (默认: 100)
+    """
+    if not os.path.exists(image_path):
+        return f"图片文件不存在: {image_path}"
+    
+    script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "06-contours", "extract.py"))
+    if not os.path.exists(script_path):
+        return f"提取脚本不存在: {script_path}"
+        
+    # 构造工作目录（图片所在目录）
+    work_dir = os.path.dirname(image_path)
+    
+    try:
+        # 调用 extract.py 脚本
+        # 注意：extract.py 需要 opencv-python, pytesseract 等库，且需要安装 Tesseract-OCR 软件
+        cmd = [
+            "python", 
+            script_path, 
+            "--input", image_path, 
+            "--gridr", str(grid_r), 
+            "--gridc", str(grid_c)
+        ]
+        
+        # 在图片所在目录下运行，以便生成的中间文件和结果文件保存在那里
+        process = subprocess.Popen(
+            cmd,
+            cwd=work_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        stdout, stderr = process.communicate()
+        
+        if process.returncode != 0:
+            return f"提取脚本运行失败:\n{stderr}"
+            
+        output_file = os.path.join(work_dir, "extracted_heights.txt")
+        if os.path.exists(output_file):
+            return f"高程提取成功！\n输出文件: {output_file}\n\n脚本输出摘要:\n{stdout[-500:]}" # 返回最后500字符日志
+        else:
+            return f"脚本运行完成但未找到输出文件。\n脚本输出:\n{stdout}\n错误信息:\n{stderr}"
+
+    except Exception as e:
+        return f"调用提取脚本时发生异常: {str(e)}"
+
+if __name__ == "__main__":
     
     final_text_values = text_values
     if has_digits and no_digits:
