@@ -6,7 +6,32 @@ from dotenv import load_dotenv
 import os
 import sys
 
+from pathlib import Path
+
 from mcp_client import MCPClient
+
+
+def _pick_python_executable() -> str:
+    """Prefer workspace venv Python so MCP tools see the same deps (e.g. cv2)."""
+    venv = os.environ.get("VIRTUAL_ENV")
+    if venv:
+        candidate = Path(venv) / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+        if candidate.exists():
+            return str(candidate)
+
+    # Prefer project-local venv: <MYGPTAIv2>/.venv
+    project_root = Path(__file__).resolve().parent
+    candidate = project_root / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    if candidate.exists():
+        return str(candidate)
+
+    # Fallback: workspace-root venv: <repo_root>/.venv
+    repo_root = project_root.parent
+    candidate = repo_root / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    if candidate.exists():
+        return str(candidate)
+
+    return sys.executable
 
 
 def get_api_key() -> str:
@@ -693,7 +718,8 @@ class LLMProcessor:
         # mcp_server_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "mcp_server_haiyou.py"))
         mcp_server_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "mcp_server_shihua.py"))
         print(f">>> Starting MCP Client with server: {mcp_server_path}")
-        print(f">>> Using python executable: {sys.executable}")
+        python_executable = _pick_python_executable()
+        print(f">>> Using python executable: {python_executable}")
         
         if not os.path.exists(mcp_server_path):
             print(f">>> ERROR: MCP server file not found at {mcp_server_path}")
@@ -701,7 +727,7 @@ class LLMProcessor:
 
         # 启动 MCP Client 并调用 MCP Tool
         # async with MCPClient("uv", ["run", mcp_server_path]) as client:
-        async with MCPClient(sys.executable, [mcp_server_path]) as client:
+        async with MCPClient(python_executable, [mcp_server_path]) as client:
             print(f">>> MCP Client connected. Calling tool: {function_name} with args: {args}")
             result = await client.call_tool(function_name, args)
             print(f">>> Tool execution finished. Result length: {len(result)}")

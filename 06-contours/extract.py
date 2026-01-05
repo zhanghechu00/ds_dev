@@ -5,9 +5,59 @@ import numpy as np
 import pytesseract
 from collections import defaultdict
 import argparse
+import os
+from pathlib import Path
 print("DEBUG: Imports finished.", flush=True)
 
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+def _configure_tesseract() -> None:
+    """Prefer the intended Tesseract install (e.g. 5.5) and its tessdata.
+
+    This avoids accidentally using an older Tesseract from PATH (often 3.0).
+    """
+    candidates: list[str] = []
+    if os.environ.get("TESSERACT_CMD"):
+        candidates.append(os.environ["TESSERACT_CMD"])
+    if os.environ.get("TESSERACT_EXE"):
+        candidates.append(os.environ["TESSERACT_EXE"])
+
+    # Prefer 64-bit default install location first.
+    candidates.extend(
+        [
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        ]
+    )
+
+    chosen: str | None = None
+    for exe in candidates:
+        if exe and Path(exe).exists():
+            chosen = exe
+            break
+
+    if chosen:
+        pytesseract.pytesseract.tesseract_cmd = chosen
+
+        # Ensure tessdata is discoverable; Tesseract expects TESSDATA_PREFIX to
+        # point to the tessdata directory.
+        tessdata_dir = Path(chosen).parent / "tessdata"
+        if tessdata_dir.exists() and not os.environ.get("TESSDATA_PREFIX"):
+            os.environ["TESSDATA_PREFIX"] = str(tessdata_dir)
+
+    # Best-effort: print version for debugging.
+    try:
+        import subprocess
+
+        cmd = pytesseract.pytesseract.tesseract_cmd or "tesseract"
+        out = subprocess.check_output([cmd, "--version"], stderr=subprocess.STDOUT, text=True)
+        first_line = out.splitlines()[0] if out else ""
+        print(f"DEBUG: Using tesseract: {cmd} ({first_line})", flush=True)
+        if os.environ.get("TESSDATA_PREFIX"):
+            print(f"DEBUG: TESSDATA_PREFIX={os.environ['TESSDATA_PREFIX']}", flush=True)
+    except Exception as e:
+        print(f"DEBUG: Could not query tesseract version: {e}", flush=True)
+
+
+_configure_tesseract()
 
 def extract_frames(img):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
