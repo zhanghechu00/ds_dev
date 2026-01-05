@@ -3,7 +3,13 @@ from mcp.server.fastmcp import FastMCP
 import asyncio
 import subprocess
 import os
+import sys
 from flask import url_for
+
+# Debug logging to file
+with open("mcp_server_debug.log", "a", encoding="utf-8") as f:
+    f.write(f"MCP Server starting... PID: {os.getpid()}\n")
+
 try:
     from docx import Document
 except ImportError:
@@ -467,6 +473,9 @@ async def extract_heights_from_image(image_path: str, grid_r: int = 100, grid_c:
         grid_r: 行方向网格数 (默认: 100)
         grid_c: 列方向网格数 (默认: 100)
     """
+    with open("mcp_server_debug.log", "a", encoding="utf-8") as f:
+        f.write(f"Tool extract_heights_from_image called. Path: {image_path}\n")
+
     if not os.path.exists(image_path):
         return f"图片文件不存在: {image_path}"
     
@@ -481,23 +490,42 @@ async def extract_heights_from_image(image_path: str, grid_r: int = 100, grid_c:
         # 调用 extract.py 脚本
         # 注意：extract.py 需要 opencv-python, pytesseract 等库，且需要安装 Tesseract-OCR 软件
         cmd = [
-            "python", 
+            sys.executable, 
+            "-u", # Unbuffered output
             script_path, 
             "--input", image_path, 
             "--gridr", str(grid_r), 
             "--gridc", str(grid_c)
         ]
         
+        with open("mcp_server_debug.log", "a", encoding="utf-8") as f:
+            f.write(f"Running cmd: {cmd}\n")
+
         # 在图片所在目录下运行，以便生成的中间文件和结果文件保存在那里
         process = subprocess.Popen(
             cmd,
             cwd=work_dir,
+            stdin=subprocess.DEVNULL, # Prevent stdin inheritance
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
         )
-        stdout, stderr = process.communicate()
         
+        with open("mcp_server_debug.log", "a", encoding="utf-8") as f:
+            f.write(f"Process started. Waiting for communicate...\n")
+
+        try:
+            stdout, stderr = process.communicate(timeout=60) # 60 seconds timeout
+        except subprocess.TimeoutExpired:
+            process.kill()
+            stdout, stderr = process.communicate()
+            return f"提取脚本运行超时 (60s)。\nPartial Stdout: {stdout}\nPartial Stderr: {stderr}"
+        
+        with open("mcp_server_debug.log", "a", encoding="utf-8") as f:
+            f.write(f"Process finished. Return code: {process.returncode}\n")
+            if stderr:
+                f.write(f"Stderr: {stderr[:200]}...\n")
+
         if process.returncode != 0:
             return f"提取脚本运行失败:\n{stderr}"
             
@@ -509,25 +537,6 @@ async def extract_heights_from_image(image_path: str, grid_r: int = 100, grid_c:
 
     except Exception as e:
         return f"调用提取脚本时发生异常: {str(e)}"
-
-if __name__ == "__main__":
-    
-    final_text_values = text_values
-    if has_digits and no_digits:
-        final_text_values = has_digits
-        # 更新用于显示的字符串，只显示过滤后的有效值
-        text_val_str = "; ".join(final_text_values)
-
-    unique_text_values = set(final_text_values)
-    has_internal_conflict = len(unique_text_values) > 1
-
-    if match_count > 0:
-        if has_internal_conflict:
-             return f"部分一致（警告：正文存在多值冲突）。正文值: [{text_val_str}]，表格值: [{table_val_str}]。虽然找到了匹配项，但正文中存在多个不同的数值，请人工核实。"
-        else:
-             return f"内容一致。正文值: [{text_val_str}]，表格值: [{table_val_str}]"
-    else:
-        return f"内容不一致！正文值: [{text_val_str}]，表格值: [{table_val_str}]"
 
 if __name__ == "__main__":
     # Initialize and run the server

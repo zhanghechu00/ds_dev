@@ -4,6 +4,7 @@ import requests
 import json
 from dotenv import load_dotenv
 import os
+import sys
 
 from mcp_client import MCPClient
 
@@ -510,6 +511,7 @@ class LLMProcessor:
             # result = self.execute_tool_with_mcp(tool_name, tool_args)
             ok, args_or_need = _check_and_collect_args(tool_name, tool_args)
             logger.log(f"Tool call: {tool_name}, args: {args_or_need}, ok: {ok}")
+            print(f">>> Tool call detected: {tool_name}")
             if not ok:
     # 缺少必填参数：把 need_params 返回给 /chat → 前端渲染表单
                 return {
@@ -619,6 +621,7 @@ class LLMProcessor:
             raise ValueError(f"未知的工具名称：{function_name}")
 
     def call_model(self):
+        print(">>> Calling LLM (First pass)...")
         # force_tool_first = (len(self.history) <= 2)
         request_body = {
             "model": MODEL_NAME,
@@ -671,7 +674,9 @@ class LLMProcessor:
     #     loop = asyncio.new_event_loop()
     #     return loop.run_until_complete(self.execute_tool_with_mcp_async(function_name, args))
     def execute_tool_with_mcp(self, function_name, args):
+        print(f">>> Executing tool with MCP: {function_name}")
         loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         try:
             return loop.run_until_complete(self.execute_tool_with_mcp_async(function_name, args))
         finally:
@@ -687,8 +692,18 @@ class LLMProcessor:
         # 获取与当前脚本同目录下的 mcp_server.py 的绝对地址
         # mcp_server_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "mcp_server_haiyou.py"))
         mcp_server_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "mcp_server_shihua.py"))
+        print(f">>> Starting MCP Client with server: {mcp_server_path}")
+        print(f">>> Using python executable: {sys.executable}")
+        
+        if not os.path.exists(mcp_server_path):
+            print(f">>> ERROR: MCP server file not found at {mcp_server_path}")
+            return "Error: MCP server file not found."
 
         # 启动 MCP Client 并调用 MCP Tool
-        async with MCPClient("uv", ["run", mcp_server_path]) as client:
-            return await client.call_tool(function_name, args)
+        # async with MCPClient("uv", ["run", mcp_server_path]) as client:
+        async with MCPClient(sys.executable, [mcp_server_path]) as client:
+            print(f">>> MCP Client connected. Calling tool: {function_name} with args: {args}")
+            result = await client.call_tool(function_name, args)
+            print(f">>> Tool execution finished. Result length: {len(result)}")
+            return result
 

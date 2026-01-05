@@ -21,15 +21,20 @@ class MCPClient:
 
     async def connect_to_server(self):
         """Connect to the MCP server using the uv run command"""
+        print(f">>> MCPClient: Connecting to {self.command} {self.args}...")
         server_params = StdioServerParameters(
             command=self.command,
             args=self.args,
             env=None
         )
 
+        print(">>> MCPClient: Entering stdio_client context...")
         stdio, write = await self.exit_stack.enter_async_context(stdio_client(server_params))
+        print(">>> MCPClient: stdio_client connected. Entering ClientSession...")
         self.session = await self.exit_stack.enter_async_context(ClientSession(stdio, write))
+        print(">>> MCPClient: ClientSession created. Initializing...")
         await self.session.initialize()
+        print(">>> MCPClient: Session initialized.")
 
     async def __aenter__(self):
         await self.connect_to_server()

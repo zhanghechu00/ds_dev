@@ -1,9 +1,13 @@
+import sys
+print("DEBUG: Script starting imports...", flush=True)
 import cv2
 import numpy as np
-import sys
 import pytesseract
 from collections import defaultdict
 import argparse
+print("DEBUG: Imports finished.", flush=True)
+
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 def extract_frames(img):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -128,11 +132,11 @@ def process_color_bar(inner_area):
 
 def extrac_from_main(main_area,merged,coord,heights):
     # main_area = main_area[1:-2,1:-2]
-    print("main_area ",main_area.shape,merged.shape)
+    # print("main_area ",main_area.shape,merged.shape)
     target_color = main_area[coord[0]][coord[1]]
-    print("target_color",target_color)
+    # print("target_color",target_color)
     if target_color[0] > 240 and target_color[1] > 240 and target_color[2] > 240:
-        print("Target color is too close to white, cannot extract height.")
+        # print("Target color is too close to white, cannot extract height.")
         return None
  
     z_min, z_max = heights[0], heights[-1]
@@ -183,8 +187,8 @@ def extrac_from_main(main_area,merged,coord,heights):
     # dists = np.sqrt(np.sum((merged - target_color) ** 2, axis=1))
     # 找到最接近的索引
     # idx = np.argmin(dists)
-    print("idx:",best_idx)
-    print("color at idx:", merged[best_idx],z_interp," target color:", target_color, " height:", heights[best_idx])
+    # print("idx:",best_idx)
+    # print("color at idx:", merged[best_idx],z_interp," target color:", target_color, " height:", heights[best_idx])
 
     return z_interp
 
@@ -356,14 +360,14 @@ def main():
         for ci in range(1,args.gridc):
             r = min(int(ri*step_r),main_area_r)
             c = min(int(ci*step_c),main_area_c)
-            print(f"Grid ({ri}, {ci})  pixel: ({r}, {c}) xs:{xs} ys:{ys} step_r:{step_r} step_c:{step_c}")
+            # print(f"Grid ({ri}, {ci})  pixel: ({r}, {c}) xs:{xs} ys:{ys} step_r:{step_r} step_c:{step_c}")
             dis_r = xs[-1] - (xs[1] - xs[0]) * r / rmean 
             dis_c = ys[0] + (ys[-1] - ys[-2]) * c / tmean
-            print("Image pixel coordinates:", dis_r, dis_c)
+            # print("Image pixel coordinates:", dis_r, dis_c)
             coord = (r,c)
             height = extrac_from_main(main_area,merged,coord,heights)
             if height is not None:
-                print(f"Extracted height at grid ({ri}, {ci}):", height)
+                # print(f"Extracted height at grid ({ri}, {ci}):", height)
                 result.append((dis_r,dis_c,height))
         #     break
         # break

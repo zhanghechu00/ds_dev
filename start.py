@@ -31,8 +31,10 @@ def index():
 
 @app.route('/chat', methods=['POST'])
 def chat():
+    print(">>> Flask received /chat request")
     data = request.json or {}
     action = data.get('action')
+    print(f">>> Action: {action}")
 
     try:
         if action == 'provide_tool_params':
