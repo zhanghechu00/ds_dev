@@ -7,6 +7,8 @@ import os
 import sys
 
 from pathlib import Path
+from urllib.parse import quote
+import re
 
 from mcp_client import MCPClient
 
@@ -502,9 +504,193 @@ class LLMProcessor:
         }
 
         self.history = []
+        # Pending multi-turn intents
+        # {"stage": "await_image"|"await_confirm", "image_path": str|None, "grid_r": int, "grid_c": int}
+        self._pending_extract = None
+
+    def _is_affirmative(self, text: str) -> bool:
+        t = (text or "").strip().lower()
+        return bool(re.search(r"\b(yes|y|ok|okay|sure)\b", t)) or bool(re.search(r"(是|好的|好|确认|对|没错|可以|行|嗯|需要|提取|继续)", t))
+
+    def _is_negative(self, text: str) -> bool:
+        t = (text or "").strip().lower()
+        return bool(re.search(r"\b(no|n|cancel)\b", t)) or bool(re.search(r"(不|否|不用|取消|算了)", t))
+
+    def _extract_image_path_from_query(self, query: str) -> str | None:
+        q = query or ""
+        project_root = Path(__file__).resolve().parent
+
+        # 1) If user explicitly mentions c.png, use the known sample.
+        if re.search(r"\bc\.png\b", q, flags=re.IGNORECASE) or "c.png" in q.lower():
+            candidate = project_root / "06-contours" / "c.png"
+            if candidate.exists():
+                return str(candidate)
+
+        # 2) Try to find an absolute Windows path in the text.
+        m = re.search(r"([a-zA-Z]:\\[^\s\"']+\.(?:png|jpg|jpeg|gif|bmp|webp))", q)
+        if m:
+            p = Path(m.group(1))
+            if p.exists():
+                return str(p)
+
+        # 3) Try to find a relative path like 06-contours/c.png
+        m = re.search(r"([\w\-./\\]+\.(?:png|jpg|jpeg|gif|bmp|webp))", q, flags=re.IGNORECASE)
+        if m:
+            rel = m.group(1).strip().lstrip('/\\')
+            candidate = (project_root / rel).resolve()
+            try:
+                candidate.relative_to(project_root)
+            except ValueError:
+                candidate = None
+            if candidate and candidate.exists():
+                return str(candidate)
+
+        return None
+
+    def _looks_like_user_provided_path(self, query: str) -> bool:
+        q = (query or "").strip()
+        if not q:
+            return False
+        if "路径" in q or "path" in q.lower():
+            return True
+        # If message is basically just a path (possibly with quotes)
+        if re.fullmatch(r"['\"]?[a-zA-Z]:\\[^\n\r]+\.(?:png|jpg|jpeg|gif|bmp|webp)['\"]?", q, flags=re.IGNORECASE):
+            return True
+        if re.fullmatch(r"['\"]?[\w\-./\\]+\.(?:png|jpg|jpeg|gif|bmp|webp)['\"]?", q, flags=re.IGNORECASE):
+            return True
+        return False
+
+    def _handle_extract_height_intent(self, query: str):
+        """Implements: show image -> confirm -> run tool -> report txt path."""
+        q = (query or "").strip()
+
+        def _reply_preview_and_confirm(image_path: str, prefix: str = "已找到地质构造图文件"):
+            project_root = Path(__file__).resolve().parent
+            rel = str(Path(image_path).resolve().relative_to(project_root)).replace('\\', '/')
+            preview_url = f"/preview?path={quote(rel)}"
+            self._pending_extract = {
+                "stage": "await_confirm",
+                "image_path": image_path,
+                "grid_r": 100,
+                "grid_c": 100,
+            }
+            return (
+                f"{prefix}：\n"
+                f"文件位置：{image_path}\n\n"
+                f"![地质构造图]({preview_url})\n\n"
+                f"请确认：是否要提取该图的高程信息？（回复：是/确认 或 否/取消）"
+            )
+
+        # Step B: awaiting confirmation
+        if self._pending_extract is not None:
+            stage = (self._pending_extract.get("stage") or "await_confirm")
+
+            # Awaiting an image path from the user
+            if stage == "await_image":
+                image_path = self._extract_image_path_from_query(q)
+                if image_path:
+                    reply = _reply_preview_and_confirm(image_path, prefix="已收到图片路径")
+                    self.history.append({"role": "user", "content": query})
+                    self.history.append({"role": "assistant", "content": reply})
+                    return {"final_response": reply}
+
+                if self._is_negative(q):
+                    self._pending_extract = None
+                    reply = "好的，已取消。你之后如果需要提取高程信息，直接告诉我并提供图片路径即可。"
+                    self.history.append({"role": "user", "content": query})
+                    self.history.append({"role": "assistant", "content": reply})
+                    return {"final_response": reply}
+
+                reply = "请提供要提取的图片文件路径（例如：06-contours/c.png 或 D:\\...\\xxx.png）。"
+                self.history.append({"role": "user", "content": query})
+                self.history.append({"role": "assistant", "content": reply})
+                return {"final_response": reply}
+
+            # If user provides a new image path while pending, switch target and re-preview.
+            new_image_path = self._extract_image_path_from_query(q)
+            if new_image_path and new_image_path != self._pending_extract.get("image_path"):
+                reply = _reply_preview_and_confirm(new_image_path, prefix="已切换到新的地质构造图")
+                self.history.append({"role": "user", "content": query})
+                self.history.append({"role": "assistant", "content": reply})
+                return {"final_response": reply}
+
+            if self._is_affirmative(q):
+                payload = self._pending_extract
+                self._pending_extract = None
+
+                result = self.execute_tool_with_mcp(
+                    "extract_heights_from_image",
+                    {
+                        "image_path": payload["image_path"],
+                        "grid_r": payload.get("grid_r", 100),
+                        "grid_c": payload.get("grid_c", 100),
+                    },
+                )
+
+                output_path = None
+                for line in (result or "").splitlines():
+                    if "输出文件" in line and ":" in line:
+                        output_path = line.split(":", 1)[1].strip()
+                        break
+
+                if output_path:
+                    reply = f"高程信息提取完成。\n结果文件位置：{output_path}"
+                else:
+                    # Fallback: return tool result (includes errors)
+                    reply = f"高程信息提取已执行，结果如下：\n{result}"
+
+                self.history.append({"role": "user", "content": query})
+                self.history.append({"role": "assistant", "content": reply})
+                return {"final_response": reply}
+
+            if self._is_negative(q):
+                # Keep the flow alive: ask for a different image path.
+                self._pending_extract = {
+                    "stage": "await_image",
+                    "image_path": None,
+                    "grid_r": 100,
+                    "grid_c": 100,
+                }
+                reply = "好的。请提供你希望提取的图片路径（例如：06-contours/c.png）。我会先显示预览并请你确认后再开始提取。"
+                self.history.append({"role": "user", "content": query})
+                self.history.append({"role": "assistant", "content": reply})
+                return {"final_response": reply}
+
+            # Not a clear yes/no: ask again
+            reply = "请确认：是否要提取这张图的高程信息？回复“是/确认”或“否/取消”。"
+            self.history.append({"role": "user", "content": query})
+            self.history.append({"role": "assistant", "content": reply})
+            return {"final_response": reply}
+
+        # Step A: detect intent (only minimal trigger words)
+        image_path = self._extract_image_path_from_query(q)
+        has_intent_words = bool(re.search(r"(高程|等高线|地质构造图|地形图|c\.png|提取)", q, flags=re.IGNORECASE))
+
+        # If user only provides a path (e.g. "路径是 ...png"), still start the preview+confirm flow.
+        if image_path and (has_intent_words or self._looks_like_user_provided_path(q)):
+            reply = _reply_preview_and_confirm(image_path)
+            self.history.append({"role": "user", "content": query})
+            self.history.append({"role": "assistant", "content": reply})
+            return {"final_response": reply}
+
+        if has_intent_words and not image_path:
+            # Ask for the image path, but keep a stage so the next message with just a path will preview.
+            self._pending_extract = {
+                "stage": "await_image",
+                "image_path": None,
+                "grid_r": 100,
+                "grid_c": 100,
+            }
+            reply = "请先提供地质构造图图片的文件路径（例如：06-contours/c.png 或 D:\\...\\xxx.png）。我会先把图片显示出来并请你确认后再提取高程信息。"
+            self.history.append({"role": "user", "content": query})
+            self.history.append({"role": "assistant", "content": reply})
+            return {"final_response": reply}
+
+        return None
     def new_chat(self):
         """重置会话：写入 system + 欢迎语（assistant），并把欢迎语返回给前端显示。"""
         self.history = []
+        self._pending_extract = None
         self.history.append({"role": "system", "content": SYSTEM_PROMPT})
         self.history.append({"role": "assistant", "content": WELCOME_MD})
         return {"reply": WELCOME_MD}
@@ -513,6 +699,11 @@ class LLMProcessor:
         if not any(m.get("role") == "system" for m in self.history):
             self.history.insert(0, {"role": "system", "content": SYSTEM_PROMPT})
     def process_user_query(self, query):
+
+        # Custom multi-turn flow: image preview -> confirm -> extract
+        handled = self._handle_extract_height_intent(query)
+        if handled is not None:
+            return handled
 
         # self.history.append({"role": "system", "content": "你是由武汉大学联合武汉市鸿理科技有限公司开发的Aifrac智能油气专家，你能够调用一些工具和解答相关专业问题 。"})
         # self.history.append({"role": "system", "content": "你需要对用户的提示操作步骤：step1.提供用户先设定工作路径；step2.提供用户将高程数据map.txt人工放到工作目录下面，运行高程数据Petrel建模,提示用户建模完成，让用户使用Petrel软件核对模型情况，用户确认无误执行下一步；step3.提示用户，可以运行Petrel转Aifrac程序，反馈转换结果；step4.提示用户是否执行自动设定边界条件，告诉运行情况；step5.提示用户可以进行Aifrac正演仿真模拟，反馈运行情况，或是提示用户将测井数据放到工作目录后，可以运行测井地应力约束，反馈运行结果，；step6.如果用户执行了测井地应力约束提示用户可以进行反演仿真模拟，反馈运行情况；step7.提示用户可以进行Aifrac转Petrel程序，将计算结果转换为Petrel格式，反馈转换结果，告诉用户可以在Petrel中查看结果。"})

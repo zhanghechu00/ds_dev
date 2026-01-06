@@ -1,7 +1,8 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_file, abort
 # from backend_haiyou import LLMProcessor, MODEL_NAME
 from  backend_shihua import LLMProcessor, MODEL_NAME
 import re
+from pathlib import Path
 app = Flask(__name__)
 
 llm_processor = LLMProcessor()
@@ -77,6 +78,35 @@ def chat():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/preview', methods=['GET'])
+def preview_file():
+    """Serve local project images for in-chat preview.
+
+    Security: only allows files under the MYGPTAIv2 project root and common image extensions.
+    Usage: /preview?path=06-contours/c.png
+    """
+    rel = (request.args.get('path') or '').strip().lstrip('/\\')
+    if not rel:
+        abort(400, description="missing 'path' query")
+
+    project_root = Path(__file__).resolve().parent
+    target = (project_root / rel).resolve()
+
+    # Prevent path traversal: target must be inside project_root
+    try:
+        target.relative_to(project_root)
+    except ValueError:
+        abort(403, description="path not allowed")
+
+    if not target.exists() or not target.is_file():
+        abort(404, description="file not found")
+
+    if target.suffix.lower() not in {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}:
+        abort(415, description="unsupported file type")
+
+    return send_file(target)
 
 if __name__ == '__main__':
     print("Flask app running on http://127.0.0.1:5001/")
