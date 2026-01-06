@@ -547,6 +547,24 @@ class LLMProcessor:
 
         return None
 
+    def _extract_any_path_from_query(self, query: str) -> str | None:
+        """Best-effort extraction of a file path token from user text (not limited to images)."""
+        q = (query or "").strip()
+        if not q:
+            return None
+
+        # Absolute Windows path token
+        m = re.search(r"([a-zA-Z]:\\[^\s\"']+)", q)
+        if m:
+            return m.group(1)
+
+        # Relative path token
+        m = re.search(r"([\w\-./\\]+\.[A-Za-z0-9]{1,8})", q)
+        if m:
+            return m.group(1)
+
+        return None
+
     def _looks_like_user_provided_path(self, query: str) -> bool:
         q = (query or "").strip()
         if not q:
@@ -593,6 +611,20 @@ class LLMProcessor:
                     self.history.append({"role": "user", "content": query})
                     self.history.append({"role": "assistant", "content": reply})
                     return {"final_response": reply}
+
+                # User may have provided a path, but it's not an image.
+                any_path = self._extract_any_path_from_query(q)
+                if any_path:
+                    p = Path(any_path)
+                    if p.exists() and p.is_file() and p.suffix.lower() not in {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}:
+                        reply = (
+                            "你提供的路径不是图片文件，所以我无法预览，也无法进行高程提取。\n"
+                            f"收到：{any_path}\n"
+                            "请提供图片文件路径（支持：.png/.jpg/.jpeg/.gif/.bmp/.webp）。"
+                        )
+                        self.history.append({"role": "user", "content": query})
+                        self.history.append({"role": "assistant", "content": reply})
+                        return {"final_response": reply}
 
                 if self._is_negative(q):
                     self._pending_extract = None

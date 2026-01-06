@@ -6,6 +6,56 @@ import os
 import sys
 from flask import url_for
 
+
+def _humanize_extract_failure(stderr: str, stdout: str, image_path: str) -> str:
+    s = (stderr or "").strip()
+    out = (stdout or "").strip()
+    text = (s + "\n" + out).strip()
+    t = text.lower()
+
+    # Common actionable cases
+    if "no module named 'cv2'" in t or "no module named \"cv2\"" in t:
+        return (
+            "高程提取失败：运行环境缺少 OpenCV（cv2）。\n"
+            "请确认当前用于启动服务/工具的 Python 环境已安装 opencv-python，并确保 MCP 走的是同一个虚拟环境。\n"
+            "（详细错误已写入 mcp_server_debug.log）"
+        )
+
+    if "tesseract" in t and ("not found" in t or "is not installed" in t or "tesseractnotfounderror" in t):
+        return (
+            "高程提取失败：未找到 Tesseract-OCR。\n"
+            "请安装 Tesseract 5.x，并确保 extract.py 使用正确的 tesseract.exe 路径。\n"
+            "（详细错误已写入 mcp_server_debug.log）"
+        )
+
+    if "failed loading language" in t or "error opening data file" in t or "traineddata" in t:
+        return (
+            "高程提取失败：Tesseract 语言数据（tessdata/eng.traineddata）不可用或路径配置错误。\n"
+            "请检查 TESSDATA_PREFIX 是否指向包含 tessdata 的目录，并确认存在 eng.traineddata。\n"
+            "（详细错误已写入 mcp_server_debug.log）"
+        )
+
+    if "cv2.error" in t and "src.empty" in t and "cvtcolor" in t:
+        return (
+            "高程提取失败：OpenCV 无法读取图片内容（读取结果为空）。\n"
+            f"请确认图片可以正常打开且不是空文件：{image_path}\n"
+            "如果这是截图/导出图，建议重新导出为标准 PNG/JPG 后再试。\n"
+            "（详细错误已写入 mcp_server_debug.log）"
+        )
+
+    if "图片文件不存在" in text or "file not found" in t:
+        return (
+            "高程提取失败：图片文件路径无效或文件不存在。\n"
+            f"请检查路径：{image_path}\n"
+            "（详细错误已写入 mcp_server_debug.log）"
+        )
+
+    # Generic fallback (no raw traceback)
+    return (
+        "高程提取失败：提取脚本运行出错。\n"
+        "我已把详细错误记录到 mcp_server_debug.log，你可以把日志发我我再帮你定位。"
+    )
+
 # Debug logging to file
 with open("mcp_server_debug.log", "a", encoding="utf-8") as f:
     f.write(f"MCP Server starting... PID: {os.getpid()}\n")
@@ -478,6 +528,16 @@ async def extract_heights_from_image(image_path: str, grid_r: int = 100, grid_c:
 
     if not os.path.exists(image_path):
         return f"图片文件不存在: {image_path}"
+
+    try:
+        if os.path.getsize(image_path) <= 0:
+            return (
+                "高程提取失败：图片文件大小为 0，可能文件损坏或写入未完成。\n"
+                f"请检查文件：{image_path}"
+            )
+    except OSError:
+        # size check is best-effort
+        pass
     
     script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "06-contours", "extract.py"))
     if not os.path.exists(script_path):
@@ -527,16 +587,27 @@ async def extract_heights_from_image(image_path: str, grid_r: int = 100, grid_c:
                 f.write(f"Stderr: {stderr[:200]}...\n")
 
         if process.returncode != 0:
-            return f"提取脚本运行失败:\n{stderr}"
+            with open("mcp_server_debug.log", "a", encoding="utf-8") as logf:
+                logf.write("Humanized failure returned to user (details kept in log).\n")
+            return _humanize_extract_failure(stderr, stdout, image_path)
             
         output_file = os.path.join(work_dir, "extracted_heights.txt")
         if os.path.exists(output_file):
             return f"高程提取成功！\n输出文件: {output_file}\n\n脚本输出摘要:\n{stdout[-500:]}" # 返回最后500字符日志
         else:
-            return f"脚本运行完成但未找到输出文件。\n脚本输出:\n{stdout}\n错误信息:\n{stderr}"
+            return (
+                "高程提取未完成：脚本运行结束但未生成 extracted_heights.txt。\n"
+                "可能原因：图片未识别到坐标轴数字/等高线，或中间步骤未产出。\n"
+                "（详细日志已写入 mcp_server_debug.log）"
+            )
 
     except Exception as e:
-        return f"调用提取脚本时发生异常: {str(e)}"
+        with open("mcp_server_debug.log", "a", encoding="utf-8") as logf:
+            logf.write(f"Exception in extract_heights_from_image wrapper: {repr(e)}\n")
+        return (
+            "高程提取失败：调用提取脚本时发生异常。\n"
+            "（详细日志已写入 mcp_server_debug.log）"
+        )
 
 if __name__ == "__main__":
     # Initialize and run the server
