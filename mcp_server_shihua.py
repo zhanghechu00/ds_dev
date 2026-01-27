@@ -550,7 +550,7 @@ async def extract_heights_from_image(image_path: str, grid_r: int = 100, grid_c:
         # 调用 extract.py 脚本
         # 注意：extract.py 需要 opencv-python, pytesseract 等库，且需要安装 Tesseract-OCR 软件
         cmd = [
-            sys.executable, 
+            sys.executable,
             "-u", # Unbuffered output
             script_path, 
             "--input", image_path, 
