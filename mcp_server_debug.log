@@ -1,0 +1,5 @@
+MCP Server starting... PID: 35620
+Tool extract_heights_from_image called. Path: D:\code\ds\MYGPTAIv2\06-contours\c.png
+Running cmd: ['D:\\code\\ds\\MYGPTAIv2\\.venv\\Scripts\\python.exe', '-u', 'D:\\code\\ds\\MYGPTAIv2\\06-contours\\extract.py', '--input', 'D:\\code\\ds\\MYGPTAIv2\\06-contours\\c.png', '--gridr', '100', '--gridc', '100']
+Process started. Waiting for communicate...
+Process finished. Return code: 0
