@@ -5,6 +5,11 @@ import subprocess
 import os
 import sys
 from flask import url_for
+try:
+    from rag import query_graph_rag
+except ImportError:
+     def query_graph_rag(q): return "RAG not initialized."
+
 
 
 def _humanize_extract_failure(stderr: str, stdout: str, image_path: str) -> str:
@@ -608,6 +613,15 @@ async def extract_heights_from_image(image_path: str, grid_r: int = 100, grid_c:
             "高程提取失败：调用提取脚本时发生异常。\n"
             "（详细日志已写入 mcp_server_debug.log）"
         )
+
+@mcp.tool()
+async def ask_knowledge_graph(query: str) -> str:
+    """基于项目内部文档和知识库回答问题 (RAG)
+
+    Args:
+        query: 你的问题
+    """
+    return await asyncio.to_thread(query_graph_rag, query)
 
 if __name__ == "__main__":
     # Initialize and run the server

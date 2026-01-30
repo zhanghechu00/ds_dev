@@ -4,6 +4,12 @@ import asyncio
 import subprocess
 import os
 from flask import url_for
+try:
+    from rag import query_graph_rag
+except ImportError:
+    # If rag module is not found mostly due to missing deps in env
+    def query_graph_rag(q): return "RAG module not initialized or dependencies missing."
+
 
 # Initialize FastMCP server
 mcp = FastMCP("faction_mcp_server", log_level="ERROR")
@@ -377,6 +383,15 @@ async def search_result(alt: str) -> str:
     elif alt == "地应力数据统计结果":
         img_url = "http://localhost:5000/static/simulation/地应力数据统计.png"
     return f"![alt]({img_url})"
+
+@mcp.tool()
+async def ask_knowledge_graph(query: str) -> str:
+    """基于项目内部文档和知识库回答问题 (RAG)
+
+    Args:
+        query: 你的问题
+    """
+    return await asyncio.to_thread(query_graph_rag, query)
 
 if __name__ == "__main__":
     # Initialize and run the server

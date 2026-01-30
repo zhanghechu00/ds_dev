@@ -23,6 +23,23 @@ OPENROUTER_API_KEY = get_api_key()
 MODEL_NAME = "deepseek-chat"
 content=[]
 TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "ask_knowledge_graph",
+            "description": "查询项目知识图谱，获取关于项目文档、技术原理、操作步骤的详细信息",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "问题内容"
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+    },
     # {
     #     "type": "function",
     #     "function": {
